@@ -84,10 +84,45 @@ export const MediaSchema = z.object({
 export const GenerateRequestSchema = z.object({
   sessionId: z.string().max(64).optional(),
   handle: z.string().max(80).default(""),
-  description: z.string().max(1500).default(""),
+  description: z.string().max(2000).default(""),
   language: z.enum(LANGUAGES).default("en"),
   followers: z.enum(FOLLOWER_TIERS).default("unknown"),
   images: z.array(MediaSchema).max(3).default([]),
   audio: MediaSchema.nullable().optional(),
+  avoidTitles: z.array(z.string().max(120)).max(6).default([]),
 });
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;
+
+export const ContextSchema = z.object({
+  handle: z.string().max(80).default(""),
+  description: z.string().max(2000).default(""),
+  language: z.enum(LANGUAGES).default("en"),
+  followers: z.enum(FOLLOWER_TIERS).default("unknown"),
+});
+
+export const RegenerateRequestSchema = z.object({
+  sessionId: z.string().max(64).optional(),
+  section: z.enum(["profile", "product"]),
+  productIndex: z.number().int().min(0).max(3).optional(),
+  instruction: z.string().max(300).default(""),
+  context: ContextSchema,
+  store: StoreContentSchema,
+});
+export type RegenerateRequest = z.infer<typeof RegenerateRequestSchema>;
+
+export const PublishRequestSchema = z.object({
+  sessionId: z.string().max(64).optional(),
+  handle: z.string().max(80).default(""),
+  theme: z.string().max(20).default("sunrise"),
+  language: z.enum(LANGUAGES).default("en"),
+  store: StoreContentSchema,
+  slug: z.string().max(60).optional(),
+  editToken: z.string().max(80).optional(),
+});
+export type PublishRequest = z.infer<typeof PublishRequestSchema>;
+
+export const TrackRequestSchema = z.object({
+  slug: z.string().max(60),
+  kind: z.enum(["view", "interest", "cta"]),
+  productKey: z.string().max(10).optional(),
+});

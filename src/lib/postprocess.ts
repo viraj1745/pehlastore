@@ -6,9 +6,9 @@ export type FinaliseResult =
   | { ok: true; store: StoreContent; warnings: string[]; priceAdjustments: string[] }
   | { ok: false; error: string };
 
-const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+export const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
-function clip(text: string, max: number): string {
+export function clip(text: string, max: number): string {
   const chars = Array.from(text);
   return chars.length <= max ? text : chars.slice(0, max - 1).join("").trimEnd() + "…";
 }
@@ -17,28 +17,34 @@ function nameFromHandle(handle: string): string {
   return handle.replace(/[._]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 }
 
+/** Reads one product from raw model output into clean fields (no validation yet). */
+export function parseRawProduct(p: Record<string, unknown>) {
+  return {
+    type: str(p.type) as ProductType,
+    format_label: str(p.format_label),
+    title: str(p.title),
+    description: str(p.description),
+    price_inr: typeof p.price_inr === "number" ? Math.round(p.price_inr) : Math.round(Number(p.price_inr)) || 0,
+    price_reason: str(p.price_reason),
+    cta_label: str(p.cta_label),
+    faq: Array.isArray(p.faq)
+      ? (p.faq as Record<string, unknown>[])
+          .map((f) => ({ q: str(f.q), a: str(f.a) }))
+          .filter((f) => f.q && f.a)
+          .slice(0, 3)
+      : [],
+  };
+}
+
+const PROMISES = /refund|money[\s-]?back|recording|lifetime access|certificate/i;
+
 /** Turns raw model output into a store that always follows our product rules. */
 export function finaliseStore(raw: unknown, handle: string): FinaliseResult {
   if (!raw || typeof raw !== "object") return { ok: false, error: "the store object was missing" };
   const r = raw as Record<string, unknown>;
 
-  const rawProducts = Array.isArray(r.products) ? (r.products as Record<string, unknown>[]) : [];
-  const products = rawProducts
-    .map((p) => ({
-      type: str(p.type) as ProductType,
-      format_label: str(p.format_label),
-      title: str(p.title),
-      description: str(p.description),
-      price_inr: typeof p.price_inr === "number" ? p.price_inr : Number(p.price_inr) || 0,
-      price_reason: str(p.price_reason),
-      cta_label: str(p.cta_label),
-      faq: Array.isArray(p.faq)
-        ? (p.faq as Record<string, unknown>[])
-            .map((f) => ({ q: str(f.q), a: str(f.a) }))
-            .filter((f) => f.q && f.a)
-            .slice(0, 3)
-        : [],
-    }))
+  const products = (Array.isArray(r.products) ? (r.products as Record<string, unknown>[]) : [])
+    .map(parseRawProduct)
     .filter((p) => (PRODUCT_TYPES as readonly string[]).includes(p.type) && p.title);
 
   const leadIndex = products.findIndex((p) => p.type === "lead_magnet");
@@ -57,6 +63,7 @@ export function finaliseStore(raw: unknown, handle: string): FinaliseResult {
       return { ...p, price_inr: price };
     })
     .sort((a, b) => a.price_inr - b.price_inr);
+
   // Make the ladder climb: each paid product clearly above the previous one (about 2x)
   for (let i = 1; i < pricedPaid.length; i++) {
     const previous = pricedPaid[i - 1].price_inr;
@@ -96,10 +103,9 @@ export function finaliseStore(raw: unknown, handle: string): FinaliseResult {
     const issue = parsed.error.issues[0];
     return { ok: false, error: `field "${issue.path.join(".")}" was invalid (${issue.message})` };
   }
+
   const warnings = findRiskyClaims(JSON.stringify(parsed.data));
   const faqAnswers = parsed.data.products.flatMap((p) => p.faq.map((f) => f.a)).join(" ");
-  if (/refund|money[\s-]?back|recording|lifetime access|certificate/i.test(faqAnswers)) {
-    warnings.push("unverified promises (refunds, recordings, certificates or lifetime access)");
-  }
+  if (PROMISES.test(faqAnswers)) warnings.push("unverified promises (refunds, recordings, certificates or lifetime access)");
   return { ok: true, store: parsed.data, warnings, priceAdjustments };
 }

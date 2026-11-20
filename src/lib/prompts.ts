@@ -1,6 +1,12 @@
 import type { GeminiPart } from "./gemini";
-import { FOLLOWER_LABELS, LANGUAGE_NAMES, PRODUCT_TYPES, type GenerateRequest } from "./types";
-import { priceGuideForPrompt } from "./pricing";
+import {
+  FOLLOWER_LABELS,
+  LANGUAGE_NAMES,
+  PRODUCT_TYPES,
+  type GenerateRequest,
+  type RegenerateRequest,
+} from "./types";
+import { PRICE_BANDS, priceGuideForPrompt } from "./pricing";
 
 export const SYSTEM_PROMPT = `You are PehlaStore, an expert who helps Indian micro-creators (5K-100K followers) launch their first online store on a link-in-bio commerce platform like SuperProfile. Most of them have never priced or sold anything before.
 
@@ -53,6 +59,25 @@ TRUST RULES (strict)
 
 const STR = { type: "STRING" };
 
+const PRODUCT_ITEM_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    type: { type: "STRING", enum: [...PRODUCT_TYPES] },
+    format_label: STR,
+    title: STR,
+    description: STR,
+    price_inr: { type: "INTEGER" },
+    price_reason: STR,
+    cta_label: STR,
+    faq: {
+      type: "ARRAY",
+      maxItems: 3,
+      items: { type: "OBJECT", properties: { q: STR, a: STR }, required: ["q", "a"] },
+    },
+  },
+  required: ["type", "format_label", "title", "description", "price_inr", "price_reason", "cta_label", "faq"],
+};
+
 export const GENERATION_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -74,29 +99,7 @@ export const GENERATION_SCHEMA = {
         tagline: STR,
         bio: STR,
         instagram_bio: STR,
-        products: {
-          type: "ARRAY",
-          minItems: 3,
-          maxItems: 4,
-          items: {
-            type: "OBJECT",
-            properties: {
-              type: { type: "STRING", enum: [...PRODUCT_TYPES] },
-              format_label: STR,
-              title: STR,
-              description: STR,
-              price_inr: { type: "INTEGER" },
-              price_reason: STR,
-              cta_label: STR,
-              faq: {
-                type: "ARRAY",
-                maxItems: 3,
-                items: { type: "OBJECT", properties: { q: STR, a: STR }, required: ["q", "a"] },
-              },
-            },
-            required: ["type", "format_label", "title", "description", "price_inr", "price_reason", "cta_label", "faq"],
-          },
-        },
+        products: { type: "ARRAY", minItems: 3, maxItems: 4, items: PRODUCT_ITEM_SCHEMA },
         launch_kit: {
           type: "OBJECT",
           properties: {
@@ -115,6 +118,14 @@ export const GENERATION_SCHEMA = {
   required: ["assessment", "store"],
 };
 
+export const PROFILE_SCHEMA = {
+  type: "OBJECT",
+  properties: { tagline: STR, bio: STR, instagram_bio: STR },
+  required: ["tagline", "bio", "instagram_bio"],
+};
+
+export const PRODUCT_SCHEMA = PRODUCT_ITEM_SCHEMA;
+
 export function buildParts(input: GenerateRequest, handle: string, feedback: string): GeminiPart[] {
   const description = input.description.trim();
   const lines = [
@@ -129,11 +140,61 @@ export function buildParts(input: GenerateRequest, handle: string, feedback: str
     "PRICE BANDS FOR THIS CREATOR (INR)",
     priceGuideForPrompt(input.followers),
   ];
-  lines.push("", `LANGUAGE CHECK: write every field (tagline, bio, instagram_bio, every title, description, format_label, price_reason, cta_label, FAQ and launch kit text) in ${LANGUAGE_NAMES[input.language]}. Only comment_keyword stays in English capitals.`);
+  if (input.avoidTitles.length) {
+    lines.push("", `The creator asked for FRESH ideas. Do not repeat or lightly reword these products: ${input.avoidTitles.join(" | ")}`);
+  }
+  lines.push(
+    "",
+    `LANGUAGE CHECK: write every field (tagline, bio, instagram_bio, every title, description, format_label, price_reason, cta_label, FAQ and launch kit text) in ${LANGUAGE_NAMES[input.language]}. Only comment_keyword stays in English capitals.`,
+  );
   if (feedback) lines.push("", "IMPORTANT - FIX THIS FROM YOUR PREVIOUS ATTEMPT", feedback);
 
   const parts: GeminiPart[] = [{ text: lines.join("\n") }];
   for (const image of input.images) parts.push({ inlineData: { mimeType: image.mimeType, data: image.data } });
   if (input.audio) parts.push({ inlineData: { mimeType: input.audio.mimeType, data: input.audio.data } });
   return parts;
+}
+
+export function buildSectionText(input: RegenerateRequest, feedback: string): string {
+  const { context, store } = input;
+  const instruction = input.instruction.trim();
+  const lines = [
+    "TASK: Rewrite ONE section of an existing creator store. Return only that section in the JSON schema. Keep it consistent with the rest of the store and follow every rule in your instructions.",
+    "",
+    "CREATOR",
+    `- Handle: ${context.handle ? "@" + context.handle : "not given"}`,
+    `- Follower range: ${FOLLOWER_LABELS[context.followers]}`,
+    `- About: """${context.description || store.bio}"""`,
+    "",
+    "CURRENT STORE",
+    `- Name: ${store.display_name}`,
+    `- Tagline: ${store.tagline}`,
+    ...store.products.map((p, i) => `- Product ${i + 1}: [${p.type}] ${p.title} (${p.price_inr === 0 ? "free" : "₹" + p.price_inr})`),
+    "",
+  ];
+
+  if (input.section === "profile") {
+    lines.push("SECTION TO REWRITE: profile -> tagline, bio and instagram_bio.", `Current bio: """${store.bio}"""`);
+  } else {
+    const index = input.productIndex ?? 0;
+    const p = store.products[index];
+    const band = PRICE_BANDS[p.type];
+    lines.push(
+      `SECTION TO REWRITE: product ${index + 1}`,
+      `Current: [${p.type}] ${p.title} - ${p.description}`,
+      `Keep type "${p.type}". ${
+        p.type === "lead_magnet"
+          ? "price_inr must be 0."
+          : `price_inr must be within ₹${band.min}-₹${band.max} and fit between the neighbouring products' prices.`
+      }`,
+      instruction
+        ? "Apply the creator's instruction below and change only what it asks for."
+        : "Give a clearly different angle or idea from the current product and from the other products listed above.",
+    );
+  }
+
+  lines.push("", `CREATOR'S INSTRUCTION: ${instruction ? `"""${instruction}"""` : "none - just make it better and more specific"}`);
+  lines.push("", `LANGUAGE CHECK: write everything in ${LANGUAGE_NAMES[context.language]}.`);
+  if (feedback) lines.push("", "IMPORTANT - FIX THIS FROM YOUR PREVIOUS ATTEMPT", feedback);
+  return lines.join("\n");
 }

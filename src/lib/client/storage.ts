@@ -16,7 +16,7 @@ export type StoreDraft = {
   meta: GenerationMeta;
   theme: string;
   savedAt: string;
-  published?: { slug: string; editToken: string };
+  published?: { slug: string; editToken: string; publishedAt?: string };
 };
 
 const KEYS = { session: "pehlastore:sid", input: "pehlastore:input:v1", draft: "pehlastore:draft:v1" };
