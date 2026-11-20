@@ -8,6 +8,7 @@ import { initials, inr } from "@/lib/format";
 export const THEMES = {
   sunrise: {
     name: "Sunrise",
+    swatch: "bg-orange-500",
     page: "bg-linear-to-b from-orange-50 via-amber-50 to-white text-stone-900",
     card: "bg-white",
     sub: "text-stone-600",
@@ -16,6 +17,30 @@ export const THEMES = {
     ring: "ring-orange-300",
     avatar: "bg-orange-600 text-white",
     faq: "bg-orange-50/60",
+  },
+  mint: {
+    name: "Mint",
+    swatch: "bg-emerald-500",
+    page: "bg-linear-to-b from-emerald-50 via-teal-50 to-white text-slate-900",
+    card: "bg-white",
+    sub: "text-slate-600",
+    chip: "bg-emerald-100 text-emerald-800",
+    accent: "bg-emerald-600 text-white",
+    ring: "ring-emerald-300",
+    avatar: "bg-emerald-600 text-white",
+    faq: "bg-emerald-50/70",
+  },
+  midnight: {
+    name: "Midnight",
+    swatch: "bg-indigo-600",
+    page: "bg-linear-to-b from-slate-950 via-slate-900 to-slate-900 text-slate-50",
+    card: "bg-slate-800/80",
+    sub: "text-slate-300",
+    chip: "bg-indigo-500/20 text-indigo-200",
+    accent: "bg-indigo-500 text-white",
+    ring: "ring-indigo-400",
+    avatar: "bg-indigo-500 text-white",
+    faq: "bg-slate-900/60",
   },
 } as const;
 export type ThemeKey = keyof typeof THEMES;

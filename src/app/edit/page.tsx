@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import StoreView from "@/components/StoreView";
+import StoreView, { THEMES, type ThemeKey } from "@/components/StoreView";
+import LaunchKit from "@/components/LaunchKit";
+import DemandCard from "@/components/DemandCard";
 import EditSheet, { type SheetField } from "@/components/EditSheet";
 import { clearDraft, getSessionId, loadDraft, saveDraft, type StoreDraft } from "@/lib/client/storage";
 import { netAfterFee } from "@/lib/pricing";
@@ -67,6 +69,7 @@ export default function EditPage() {
     language: d.input.language,
     followers: d.input.followers,
   };
+  const themeKey = (d.theme in THEMES ? d.theme : "sunrise") as ThemeKey;
   const liveUrl = d.published ? `${origin}/s/${d.published.slug}` : "";
   const unpublishedChanges = Boolean(d.published?.publishedAt && d.savedAt > d.published.publishedAt);
 
@@ -140,7 +143,11 @@ export default function EditPage() {
     setBusy("");
   }
 
-  async function rewrite(section: "profile" | "product", index?: number, instruction = "") {
+  async function rewrite(
+    section: "profile" | "product",
+    index?: number,
+    instruction = "",
+  ): Promise<Record<string, string | number>> {
     const res = await fetch("/api/regenerate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -242,6 +249,8 @@ export default function EditPage() {
           </div>
         )}
 
+        {d.published && <DemandCard slug={d.published.slug} editToken={d.published.editToken} products={d.store.products} />}
+
         {!d.published && (
           <p className="rounded-2xl bg-stone-900 px-4 py-3 text-sm text-white">
             ✨ Ready in {Math.round(d.meta.ms / 1000)}s. <b>Tap any section to edit it.</b>
@@ -264,16 +273,42 @@ export default function EditPage() {
         >
           ↻ Not quite right? Get fresh ideas
         </button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-stone-700">Look:</span>
+          {(Object.keys(THEMES) as ThemeKey[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => persist({ ...d, theme: key, savedAt: new Date().toISOString() })}
+              className={`flex items-center gap-1.5 rounded-full border bg-white px-3 py-1.5 text-sm ${
+                themeKey === key ? "border-stone-900 font-semibold" : "border-stone-300"
+              }`}
+            >
+              <span className={`h-3.5 w-3.5 rounded-full ${THEMES[key].swatch}`} />
+              {THEMES[key].name}
+            </button>
+          ))}
+        </div>
       </div>
 
       <StoreView
         store={d.store}
         handle={d.input.handle}
-        theme="sunrise"
+        theme={themeKey}
         mode="edit"
         onEditProfile={() => setSheet({ kind: "profile" })}
         onEditProduct={(index) => setSheet({ kind: "product", index })}
       />
+
+      <div className="mx-auto max-w-md px-4 pb-24">
+        <LaunchKit
+          kit={d.store.launch_kit}
+          instagramBio={d.store.instagram_bio}
+          liveUrl={liveUrl}
+          storyUrl={d.published ? `/api/story/${d.published.slug}?v=${encodeURIComponent(d.published.publishedAt ?? "")}` : ""}
+        />
+      </div>
 
       {sheet?.kind === "profile" && (
         <EditSheet
