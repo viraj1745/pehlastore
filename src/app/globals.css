@@ -21,3 +21,83 @@ body {
 .no-scrollbar {
   scrollbar-width: none;
 }
+
+/* ---------- Motion ---------- */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(36px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-36px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pop {
+  0% { transform: scale(0.94); }
+  60% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.45); }
+  100% { box-shadow: 0 0 0 14px rgba(234, 88, 12, 0); }
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes confetti-fall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0.9; }
+}
+
+.anim-fade-up { animation: fade-up 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.anim-slide-right { animation: slide-in-right 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.anim-slide-left { animation: slide-in-left 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.anim-pop { animation: pop 0.35s ease-out both; }
+.anim-float { animation: float 3.2s ease-in-out infinite; }
+.anim-pulse-ring { animation: pulse-ring 1.6s ease-out infinite; }
+.anim-sheet-up { animation: sheet-up 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.anim-fade-in { animation: fade-in 0.25s ease-out both; }
+
+.delay-1 { animation-delay: 0.08s; }
+.delay-2 { animation-delay: 0.16s; }
+.delay-3 { animation-delay: 0.24s; }
+.delay-4 { animation-delay: 0.32s; }
+.delay-5 { animation-delay: 0.4s; }
+
+.shimmer {
+  background: linear-gradient(90deg, #ece7df 0px, #f8f5ef 60px, #ece7df 120px);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.press {
+  transition: transform 0.12s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.press:active {
+  transform: scale(0.97);
+}
+
+/* Respect the phone's "reduce motion" setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

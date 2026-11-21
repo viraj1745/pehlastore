@@ -58,13 +58,50 @@ export const LaunchKitSchema = z.object({
 });
 export type LaunchKit = z.infer<typeof LaunchKitSchema>;
 
+// ---------- Modular page: sections and design ----------
+export const BLOCK_TYPES = ["products", "about", "links", "socials", "testimonials", "video", "faq", "announcement"] as const;
+export type BlockType = (typeof BLOCK_TYPES)[number];
+
+export const BlockSchema = z.object({
+  id: z.string().min(1).max(24),
+  type: z.enum(BLOCK_TYPES),
+  hidden: z.boolean().default(false),
+  title: z.string().max(80).default(""),
+  text: z.string().max(800).default(""),
+  url: z.string().max(300).default(""),
+  links: z.array(z.object({ label: z.string().min(1).max(60), url: z.string().min(4).max(300) })).max(8).default([]),
+  quotes: z.array(z.object({ quote: z.string().min(3).max(300), name: z.string().max(60).default("") })).max(6).default([]),
+  faqs: z.array(z.object({ q: z.string().min(3).max(160), a: z.string().min(1).max(500) })).max(8).default([]),
+  socials: z
+    .object({
+      instagram: z.string().max(60).default(""),
+      youtube: z.string().max(120).default(""),
+      whatsapp: z.string().max(20).default(""),
+      telegram: z.string().max(80).default(""),
+    })
+    .default({ instagram: "", youtube: "", whatsapp: "", telegram: "" }),
+});
+export type Block = z.infer<typeof BlockSchema>;
+
+export const FONT_STYLES = ["modern", "elegant", "rounded"] as const;
+export const BUTTON_STYLES = ["pill", "rounded", "square"] as const;
+export const CARD_STYLES = ["shadow", "outline", "flat"] as const;
+export const DesignSchema = z.object({
+  font: z.enum(FONT_STYLES).default("modern"),
+  button: z.enum(BUTTON_STYLES).default("pill"),
+  card: z.enum(CARD_STYLES).default("shadow"),
+});
+export type Design = z.infer<typeof DesignSchema>;
+
 export const StoreContentSchema = z.object({
   display_name: z.string().min(1).max(60),
   tagline: z.string().min(3).max(140),
   bio: z.string().min(20).max(700),
   instagram_bio: z.string().min(10).max(160),
-  products: z.array(ProductSchema).min(3).max(4),
+  products: z.array(ProductSchema).min(1).max(6),
   launch_kit: LaunchKitSchema,
+  blocks: z.array(BlockSchema).max(12).optional(),
+  design: DesignSchema.optional(),
 });
 export type StoreContent = z.infer<typeof StoreContentSchema>;
 
@@ -126,3 +163,52 @@ export const TrackRequestSchema = z.object({
   kind: z.enum(["view", "interest", "cta"]),
   productKey: z.string().max(10).optional(),
 });
+
+// ---------- Product toolkit: outline, bump offer, launch plan ----------
+export const OutlineSchema = z.object({
+  title: z.string().min(3).max(120),
+  promise: z.string().min(10).max(300),
+  time_to_make: z.string().min(2).max(80),
+  format_tip: z.string().min(5).max(300),
+  sections: z
+    .array(
+      z.object({
+        heading: z.string().min(2).max(120),
+        points: z.array(z.string().min(2).max(240)).min(1).max(6),
+      }),
+    )
+    .min(3)
+    .max(8),
+});
+export type Outline = z.infer<typeof OutlineSchema>;
+
+export const BumpSchema = z.object({
+  title: z.string().min(3).max(90),
+  price_inr: z.number().int().min(29).max(999),
+  pitch: z.string().min(10).max(240),
+});
+export type Bump = z.infer<typeof BumpSchema>;
+
+export const PLAN_CHANNELS = ["Reel", "Story", "Post", "Carousel", "WhatsApp", "Live"] as const;
+export const LaunchPlanSchema = z.object({
+  days: z
+    .array(
+      z.object({
+        day: z.number().int().min(1).max(7),
+        channel: z.enum(PLAN_CHANNELS),
+        title: z.string().min(3).max(100),
+        script: z.string().min(10).max(700),
+      }),
+    )
+    .length(7),
+});
+export type LaunchPlan = z.infer<typeof LaunchPlanSchema>;
+
+export const AssistRequestSchema = z.object({
+  sessionId: z.string().max(64).optional(),
+  kind: z.enum(["outline", "bump", "launch_plan"]),
+  productIndex: z.number().int().min(0).max(3).optional(),
+  context: ContextSchema,
+  store: StoreContentSchema,
+});
+export type AssistRequest = z.infer<typeof AssistRequestSchema>;

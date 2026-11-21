@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { LaunchKit as Kit } from "@/lib/types";
+import { trackEvent } from "@/lib/client/track";
 
 export default function LaunchKit({
   kit,
@@ -31,6 +32,7 @@ export default function LaunchKit({
   ];
 
   function copy(id: string, text: string) {
+    trackEvent("launch_kit_copied", { item: id });
     navigator.clipboard?.writeText(text).catch(() => {});
     setCopied(id);
     setTimeout(() => setCopied(""), 1800);
@@ -78,7 +80,12 @@ export default function LaunchKit({
             <div className="mt-2 flex items-end gap-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={storyUrl} alt="Story image preview" className="h-48 rounded-xl border border-stone-200" />
-              <a href={storyUrl} download="my-store-story.png" className="rounded-full bg-orange-600 px-4 py-2 text-sm font-semibold text-white">
+                            <a
+                href={storyUrl}
+                download="my-store-story.png"
+                onClick={() => trackEvent("story_downloaded")}
+                className="rounded-full bg-orange-600 px-4 py-2 text-sm font-semibold text-white"
+              >
                 Download
               </a>
             </div>

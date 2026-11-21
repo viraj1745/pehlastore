@@ -2,7 +2,9 @@ import type { GeminiPart } from "./gemini";
 import {
   FOLLOWER_LABELS,
   LANGUAGE_NAMES,
+  PLAN_CHANNELS,
   PRODUCT_TYPES,
+  type AssistRequest,
   type GenerateRequest,
   type RegenerateRequest,
 } from "./types";
@@ -27,10 +29,10 @@ STEP 2 - PRODUCTS (3 or 4 in total)
 - Only suggest products a new creator can realistically make within a week.
 - Prices: whole rupees, inside the band given for each type, ending in 99 (₹199, ₹499, ₹999, ₹1,499). Indian buyers are price-sensitive; respect the audience-size guidance.
 - price_reason: one short line to the creator explaining the price in plain words (effort, audience size, or a relatable comparison). Do not repeat the price number itself.
-- description: 2-4 short sentences - who it is for, the concrete deliverables, the realistic outcome.
+- description: 2-3 short sentences - who it is for, the concrete deliverables, the realistic outcome.
 - format_label: short, e.g. "PDF guide · 30 pages", "4-week live cohort", "45-min video call", "Monthly Telegram group".
 - cta_label: short button text, e.g. "Get it free", "Buy now", "Book a call", "Join now".
-- faq: 2 short Q&As per paid product, 1 for the lead magnet, answering real buyer doubts (who it is for, level, language, format). NEVER promise recordings, refunds, money-back, certificates, lifetime access, bonuses or delivery times unless the creator stated them; if a buyer might ask, answer "Message me on Instagram for details".
+- faq: exactly 1 short Q&A per product, answering the most likely buyer doubt (who it is for, level, language or format). NEVER promise recordings, refunds, money-back, certificates, lifetime access, bonuses or delivery times unless the creator stated them; if a buyer might ask, answer "Message me on Instagram for details".
 
 STEP 3 - PROFILE
 - display_name: the creator's name if known from the description or screenshots, else the handle written as a name. Never invent a surname.
@@ -194,6 +196,117 @@ export function buildSectionText(input: RegenerateRequest, feedback: string): st
   }
 
   lines.push("", `CREATOR'S INSTRUCTION: ${instruction ? `"""${instruction}"""` : "none - just make it better and more specific"}`);
+  lines.push("", `LANGUAGE CHECK: write everything in ${LANGUAGE_NAMES[context.language]}.`);
+  if (feedback) lines.push("", "IMPORTANT - FIX THIS FROM YOUR PREVIOUS ATTEMPT", feedback);
+  return lines.join("\n");
+}
+
+// ---------- Product toolkit prompts ----------
+const OUTLINE_GUIDE: Record<string, string> = {
+  lead_magnet: "A short free resource (1-5 pages or a checklist). Sections = the actual items or steps it contains.",
+  digital_product: "A guide, ebook or template pack. Sections = chapters or template pages, with what each contains.",
+  course: "A recorded course or live cohort. Sections = modules; points = the lessons or sessions inside each module.",
+  webinar: "A live workshop. Sections = agenda blocks with minute timings in the heading (e.g. '0-10 min: Welcome and problem'); include a Q&A block and a soft mention of the creator's next product.",
+  one_on_one: "A paid 1:1 call. Sections: 'Before the call' (intake questions to send the buyer), the call agenda with minute timings, and 'After the call' (what the buyer receives).",
+  community: "A paid monthly group. Sections = the first 4 weekly themes, plus 'Weekly rituals' and 'Group rules'.",
+};
+
+export const OUTLINE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    title: STR,
+    promise: STR,
+    time_to_make: STR,
+    format_tip: STR,
+    sections: {
+      type: "ARRAY",
+      minItems: 3,
+      maxItems: 8,
+      items: {
+        type: "OBJECT",
+        properties: { heading: STR, points: { type: "ARRAY", minItems: 1, maxItems: 6, items: STR } },
+        required: ["heading", "points"],
+      },
+    },
+  },
+  required: ["title", "promise", "time_to_make", "format_tip", "sections"],
+};
+
+export const BUMP_SCHEMA = {
+  type: "OBJECT",
+  properties: { title: STR, price_inr: { type: "INTEGER" }, pitch: STR },
+  required: ["title", "price_inr", "pitch"],
+};
+
+export const LAUNCH_PLAN_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    days: {
+      type: "ARRAY",
+      minItems: 7,
+      maxItems: 7,
+      items: {
+        type: "OBJECT",
+        properties: { day: { type: "INTEGER" }, channel: { type: "STRING", enum: [...PLAN_CHANNELS] }, title: STR, script: STR },
+        required: ["day", "channel", "title", "script"],
+      },
+    },
+  },
+  required: ["days"],
+};
+
+/** Highest bump price: about 40% of the main product, between ₹49 and ₹499. */
+export const bumpMax = (mainPrice: number) => Math.max(49, Math.min(499, Math.round(mainPrice * 0.4)));
+
+export function buildAssistText(input: AssistRequest, feedback: string): string {
+  const { context, store } = input;
+  const lines = [
+    "TASK: Help a first-time Indian creator turn their store into real products and first sales. Return only the JSON in the schema. Follow every trust rule in your instructions.",
+    "",
+    "CREATOR",
+    `- Handle: ${context.handle ? "@" + context.handle : "not given"}`,
+    `- Follower range: ${FOLLOWER_LABELS[context.followers]}`,
+    `- About: """${context.description || store.bio}"""`,
+    "",
+    "STORE",
+    `- Name: ${store.display_name}`,
+    ...store.products.map((p, i) => `- Product ${i + 1}: [${p.type}] ${p.title} (${p.price_inr === 0 ? "free" : "₹" + p.price_inr})`),
+    `- Instagram Auto-DM comment keyword: ${store.launch_kit.comment_keyword}`,
+    "",
+  ];
+
+  if (input.kind === "outline") {
+    const p = store.products[input.productIndex ?? 0];
+    lines.push(
+      `WRITE A CONTENT OUTLINE for: [${p.type}] "${p.title}" (${p.format_label}) - ${p.description}`,
+      `What this product type needs: ${OUTLINE_GUIDE[p.type]}`,
+      "- Make it specific and practical, so the creator can make it this weekend with a phone, Google Docs, Canva or Zoom.",
+      "- title: the product title (you may polish it). promise: one line on the buyer's realistic outcome, no guarantees.",
+      "- time_to_make: a realistic estimate such as '4-6 hours'. format_tip: one practical tip for producing or delivering it.",
+      "- 3 to 8 sections, each with 1 to 6 short points.",
+    );
+  } else if (input.kind === "bump") {
+    const p = store.products[input.productIndex ?? 0];
+    lines.push(
+      `SUGGEST ONE BUMP OFFER for: [${p.type}] "${p.title}" at ₹${p.price_inr}.`,
+      "- A bump offer is a small add-on the buyer can tick at checkout. It must complement the main product and be quick to make (a checklist, template, bonus guide, short recording, or a priority Q&A).",
+      `- price_inr between ₹49 and ₹${bumpMax(p.price_inr)}, ending in 9.`,
+      "- pitch: the one line the buyer sees at checkout, e.g. 'Add the weekly grocery list template for just ₹99'.",
+    );
+  } else {
+    lines.push(
+      "CREATE A 7-DAY LAUNCH PLAN for this store, one item per day:",
+      "- Day 1: a teaser Reel about the problem the creator solves.",
+      "- Day 2: a Story poll asking followers which product they want first (use the real product titles).",
+      `- Day 3: a Reel giving away the free lead magnet with "Comment ${store.launch_kit.comment_keyword}".`,
+      "- Day 4: a Carousel or Post with a useful mini-lesson from the core product.",
+      "- Day 5: a Story answering common doubts and showing behind the scenes.",
+      "- Day 6: a launch Reel or Live for the main paid product, mentioning {link}.",
+      "- Day 7: a WhatsApp broadcast and a thank-you Story with {link}.",
+      "- title: a short label. script: what to say or write, ready to use, 2-5 short sentences.",
+    );
+  }
+
   lines.push("", `LANGUAGE CHECK: write everything in ${LANGUAGE_NAMES[context.language]}.`);
   if (feedback) lines.push("", "IMPORTANT - FIX THIS FROM YOUR PREVIOUS ATTEMPT", feedback);
   return lines.join("\n");

@@ -1,6 +1,10 @@
-const MODELS = ["gemini-flash-lite-latest", "gemini-flash-latest"];
+const MODELS = ["gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3-flash-preview"];
+const MODEL_TIMEOUTS = [15000, 18000, 20000];
 const endpoint = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+/** Models that rejected the "no thinking" setting; we stop sending it to them. */
+const thinkingConfigUnsupported = new Set<string>();
 
 export type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 export type GeminiErrorKind = "timeout" | "busy" | "blocked" | "bad_output" | "config" | "failed";
@@ -34,13 +38,15 @@ export async function generateJson(opts: {
 
   let lastError = new GeminiError("No model answered", "failed");
 
-  for (const model of MODELS) {
+  for (const [index, model] of MODELS.entries()) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const remaining = opts.deadline - Date.now();
       if (remaining < 5000) throw new GeminiError("Ran out of time", "timeout");
 
+      const noThinking = !thinkingConfigUnsupported.has(model);
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), Math.min(25000, remaining - 1000));
+      const timer = setTimeout(() => controller.abort(), Math.min(MODEL_TIMEOUTS[index] ?? 20000, remaining - 1000));
+      const started = Date.now();
       try {
         const res = await fetch(endpoint(model), {
           method: "POST",
@@ -53,19 +59,30 @@ export async function generateJson(opts: {
               temperature: opts.temperature ?? 0.8,
               responseMimeType: "application/json",
               responseSchema: opts.schema,
+              maxOutputTokens: 6000,
+              // Structured writing doesn't need extended reasoning; skipping it cuts latency a lot.
+              ...(noThinking ? { thinkingConfig: { thinkingLevel: "minimal" } } : {}),
             },
           }),
         });
         const body = (await res.json().catch(() => ({}))) as GeminiResponse;
 
+        if (res.status === 400 && noThinking) {
+          console.warn(`[gemini] ${model} rejected the no-thinking setting; retrying without it`);
+          thinkingConfigUnsupported.add(model);
+          attempt--; // retry the same model without the thinking setting
+          continue;
+        }
         if ([429, 500, 503].includes(res.status)) {
+          console.warn(`[gemini] ${model} busy (HTTP ${res.status}) after ${Date.now() - started}ms`);
           lastError = new GeminiError(`${model} busy (HTTP ${res.status})`, "busy");
-          await sleep(700 * (attempt + 1));
-          continue; // retry the same model once, then move to the backup
+          await sleep(300);
+          break; // an overloaded model rarely recovers in seconds: try the next one
         }
         if (!res.ok) {
+          console.warn(`[gemini] ${model} HTTP ${res.status}: ${body.error?.message ?? ""}`);
           lastError = new GeminiError(body.error?.message ?? `HTTP ${res.status}`, "failed");
-          break; // try the backup model
+          break;
         }
 
         const candidate = body.candidates?.[0];
@@ -77,12 +94,16 @@ export async function generateJson(opts: {
 
         const text = (candidate.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
         try {
-          return { data: JSON.parse(text), model };
+          const data = JSON.parse(text);
+          console.info(`[gemini] ${model} ok in ${Date.now() - started}ms`);
+          return { data, model };
         } catch {
+          console.warn(`[gemini] ${model} returned invalid JSON (finish: ${candidate.finishReason ?? "?"})`);
           lastError = new GeminiError("Model returned invalid JSON", "bad_output");
         }
       } catch (error) {
         if ((error as Error).name === "AbortError") {
+          console.warn(`[gemini] ${model} timed out after ${Date.now() - started}ms`);
           lastError = new GeminiError(`${model} timed out`, "timeout");
           break; // a slow model won't be faster on retry: go to the backup
         }

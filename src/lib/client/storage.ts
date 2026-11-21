@@ -1,4 +1,4 @@
-import type { FollowerTier, Language, StoreContent } from "@/lib/types";
+import type { Bump, FollowerTier, Language, LaunchPlan, Outline, StoreContent } from "@/lib/types";
 
 export type InputDraft = { handle: string; description: string; language: Language; followers: FollowerTier };
 
@@ -10,6 +10,13 @@ export type GenerationMeta = {
   detected?: { handle: string; followers: string; niche: string };
 };
 
+/** AI helpers the creator asked for: kept with the draft, not published. */
+export type StoreExtras = {
+  outlines?: Record<string, Outline>;
+  bumps?: Record<string, Bump>;
+  launchPlan?: LaunchPlan;
+};
+
 export type StoreDraft = {
   input: InputDraft;
   store: StoreContent;
@@ -17,6 +24,7 @@ export type StoreDraft = {
   theme: string;
   savedAt: string;
   published?: { slug: string; editToken: string; publishedAt?: string };
+  extras?: StoreExtras;
 };
 
 const KEYS = { session: "pehlastore:sid", input: "pehlastore:input:v1", draft: "pehlastore:draft:v1" };

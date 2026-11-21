@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   });
 
   const started = Date.now();
-  const deadline = started + 52_000;
+  const deadline = started + 56_000;
   let feedback = "";
   let fallback: Ok | null = null;
   let modelUsed = "";
@@ -143,6 +143,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (fallback) return success(fallback);
     const kind = error instanceof GeminiError ? error.kind : "failed";
+    console.error("[generate] failed:", kind, error instanceof Error ? error.message : error);
     void logEvent(input.sessionId, "generate_failed", { reason: kind });
     const messages: Record<string, string> = {
       timeout: "The AI took too long to respond. Your inputs are saved. Tap Try again.",

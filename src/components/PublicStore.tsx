@@ -49,6 +49,7 @@ export default function PublicStore({
         handle={handle}
         theme={themeKey}
         mode="public"
+        onLinkClick={() => track(slug, "cta", "link")}
         onProductAction={(product) => {
           track(slug, "interest", product.id);
           setPicked(product);
@@ -57,9 +58,8 @@ export default function PublicStore({
       />
 
       {picked && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setPicked(null)}>
-          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-10 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-stone-200" />
+        <div className="anim-fade-in fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setPicked(null)}>
+          <div className="anim-sheet-up w-full max-w-md rounded-t-3xl bg-white p-6 pb-10 shadow-2xl" onClick={(e) => e.stopPropagation()}>            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-stone-200" />
             {picked.type === "lead_magnet" ? (
               <>
                 <p className="text-2xl">🎁</p>
